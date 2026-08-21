@@ -1,0 +1,1272 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="robots" content="noindex,nofollow">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>스택 디펜스 검증 리그</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap">
+<style>
+  :root{
+    --ink:#0a0e11;
+    --rule:#243039;
+    --rule-soft:#1a2229;
+    --text:#c6d3da;
+    --text-dim:#71858f;
+    --text-faint:#48575f;
+    --danger:#ff4d55;
+    --focus:#ffa62b;
+    --xp:#5ad1e6;
+    --font-ui:"IBM Plex Sans KR","Malgun Gothic",system-ui,sans-serif;
+    --font-num:"IBM Plex Mono",ui-monospace,monospace;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--ink);
+    color:var(--text);
+    font-family:var(--font-ui);
+    -webkit-font-smoothing:antialiased;
+    overscroll-behavior:none;
+  }
+  .rig{
+    min-height:100vh;
+    min-height:100svh;   /* iOS 사파리: 100vh는 주소창을 포함한 큰 높이라 화면이 잘린다 */
+    display:flex;flex-direction:column;align-items:center;
+    gap:10px;padding:10px 10px 18px;
+  }
+  .rig-head{
+    width:100%;max-width:560px;
+    display:flex;align-items:baseline;justify-content:space-between;
+    gap:12px;padding-bottom:8px;border-bottom:1px solid var(--rule-soft);
+  }
+  .rig-title{font-size:13px;font-weight:600;letter-spacing:.02em;}
+  .rig-title span{color:var(--text-faint);font-weight:400;}
+  .rig-run{
+    font-family:var(--font-num);font-size:11px;letter-spacing:.14em;
+    color:var(--text-dim);text-transform:uppercase;
+  }
+
+  .stage{
+    position:relative;
+    /* 폭을 뷰포트 높이로도 묶는다. max-height만 쓰면 낮은 창에서 max-height가
+       aspect-ratio를 이겨 캔버스가 가로로 늘어난다(원이 타원이 됨). */
+    width:min(100%, 560px, calc((100vh - 150px) * 540 / 960));
+    width:min(100%, 560px, calc((100svh - 150px) * 540 / 960));
+    aspect-ratio:540/960;
+    background:#080b0e;
+    border:1px solid var(--rule);
+    touch-action:none;user-select:none;-webkit-user-select:none;
+    overflow:hidden;
+  }
+  .stage canvas{position:absolute;inset:0;width:100%;height:100%;display:block;}
+  .stage::before,.stage::after{
+    content:"";position:absolute;pointer-events:none;
+    width:14px;height:14px;border:1px solid var(--rule);
+  }
+  .stage::before{top:6px;left:6px;border-right:0;border-bottom:0;}
+  .stage::after{bottom:6px;right:6px;border-left:0;border-top:0;}
+
+  .telemetry{
+    position:absolute;top:0;left:0;right:0;padding:9px 11px;
+    display:flex;flex-direction:column;gap:6px;pointer-events:none;
+    background:linear-gradient(#080b0ed9,#080b0e00);
+  }
+  .tele-row{display:flex;align-items:center;gap:8px;font-family:var(--font-num);font-size:11px;letter-spacing:.08em;color:var(--text-dim);}
+  .tele-row b{color:var(--text);font-weight:600;font-variant-numeric:tabular-nums;}
+  .tele-spacer{flex:1;}
+  .bar{height:5px;background:#141b21;border:1px solid var(--rule-soft);position:relative;overflow:hidden;flex:none;}
+  .focusrow .bar{flex:1;}
+  .bar i{position:absolute;top:0;bottom:0;left:0;display:block;}
+  .bar.hp i{background:var(--danger);}
+  .bar.xp i{background:var(--xp);}
+  .bar.fc i{background:var(--focus);}
+  .focusrow span{font-size:9.5px;letter-spacing:.12em;color:var(--text-faint);width:34px;flex:none;}
+  .focusrow.hot span{color:var(--focus);}
+
+  .legend{
+    position:absolute;top:98px;right:11px;
+    display:flex;gap:8px;pointer-events:none;
+  }
+  .legend div{font-family:var(--font-num);font-size:9px;color:var(--text-faint);display:flex;align-items:center;gap:3px;}
+  .legend i{width:6px;height:6px;display:block;}
+
+  .synbar{
+    position:absolute;left:11px;right:11px;top:118px;
+    display:flex;flex-wrap:wrap;gap:4px;pointer-events:none;
+  }
+  .syn{
+    font-family:var(--font-num);font-size:9.5px;letter-spacing:.04em;
+    padding:2px 5px;border:1px solid var(--rule);background:#0d1216cc;color:var(--text-dim);
+  }
+  .syn b{color:var(--text);font-weight:500;}
+
+  /* 카드 = 하단 고정 패널. 기획서 컨셉 이미지대로 전장(위쪽)을 가리지 않는다.
+     논스톱의 부담은 '가려짐'이 아니라 '전투가 계속 도는 시간 압박'에서 와야 한다. */
+  .cards{
+    position:absolute;left:0;right:0;top:71%;bottom:5.5%;
+    display:flex;gap:7px;padding:0 11px;align-items:stretch;
+  }
+  .card{
+    flex:1;min-width:0;
+    background:#0e151af2;
+    border:1px solid var(--rule);
+    border-top:2px solid var(--accent);
+    padding:10px 9px;
+    text-align:left;color:var(--text);font-family:var(--font-ui);
+    cursor:pointer;display:flex;flex-direction:column;gap:4px;
+    transition:background .1s,transform .1s;
+  }
+  .card:hover,.card:focus-visible{background:#16202a;transform:translateY(-2px);outline:none;}
+  .card:focus-visible{border-color:var(--text);}
+  .card .kind{font-family:var(--font-num);font-size:9px;letter-spacing:.14em;color:var(--accent);}
+  .card .cardicon{width:26px;height:26px;display:block;flex:none;}
+  .card .name{font-size:13.5px;font-weight:600;line-height:1.2;word-break:keep-all;}
+  .card .desc{font-size:10.5px;line-height:1.4;color:var(--text-dim);word-break:keep-all;}
+
+  .overlay{
+    position:absolute;inset:0;background:#070a0cf2;
+    display:flex;flex-direction:column;justify-content:flex-start;
+    gap:13px;padding:24px 20px;overflow-y:auto;
+  }
+  /* auto 마진은 남는 공간만 흡수한다 — 넉넉하면 가운데, 넘치면 위부터 스크롤. */
+  .overlay>:first-child{margin-top:auto;}
+  .overlay>:last-child{margin-bottom:auto;}
+  /* .sheetwrap 은 overflow-x:auto 때문에 세로도 스크롤 컨테이너가 되어
+     플렉스 항목으로 찌그러진다(표가 2줄로 눌림). 축소를 막는다. */
+  .overlay>*{flex-shrink:0;}
+  .overlay h2{margin:0;font-size:18px;font-weight:700;letter-spacing:-.01em;text-wrap:balance;line-height:1.35;}
+  .overlay p{margin:0;font-size:12.5px;line-height:1.6;color:var(--text-dim);max-width:46ch;}
+  .overlay .kicker{font-family:var(--font-num);font-size:10px;letter-spacing:.18em;color:var(--text-faint);}
+  .btn{
+    font-family:var(--font-ui);font-size:13px;font-weight:600;
+    background:var(--text);color:#070a0c;border:0;padding:11px 18px;cursor:pointer;
+  }
+  .btn:hover{background:#fff;}
+  .btn.ghost{background:transparent;color:var(--text);border:1px solid var(--rule);}
+  .btn.ghost:hover{border-color:var(--text-dim);background:#0f151a;}
+  .btnrow{display:flex;gap:8px;flex-wrap:wrap;}
+
+  table.sheet{width:100%;border-collapse:collapse;font-family:var(--font-num);font-size:10.5px;}
+  table.sheet td{
+    text-align:right;padding:4px 6px;border-bottom:1px solid var(--rule-soft);
+    font-variant-numeric:tabular-nums;white-space:nowrap;
+  }
+  table.sheet td:first-child{text-align:left;}
+  .sheetwrap{overflow-x:auto;border:1px solid var(--rule-soft);}
+  .verdict{font-size:12px;line-height:1.6;border-left:2px solid var(--focus);padding-left:10px;color:var(--text);}
+  .buildline{font-family:var(--font-num);font-size:11px;color:var(--text-dim);}
+  .buildline b{font-weight:600;}
+
+  .rack{width:min(100%,560px);display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
+  .seg{display:flex;border:1px solid var(--rule);}
+  .seg button{
+    font-family:var(--font-num);font-size:10.5px;letter-spacing:.08em;
+    background:transparent;color:var(--text-dim);border:0;border-right:1px solid var(--rule);
+    padding:7px 10px;cursor:pointer;
+  }
+  .seg button:last-child{border-right:0;}
+  .seg button[aria-pressed="true"]{background:var(--text);color:#070a0c;font-weight:600;}
+  .seg button:hover[aria-pressed="false"]{color:var(--text);background:#0f151a;}
+  .racklabel{font-family:var(--font-num);font-size:10px;letter-spacing:.12em;color:var(--text-faint);}
+
+  .dev{
+    width:min(100%,560px);border:1px solid var(--rule-soft);padding:10px 12px;
+    display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px 14px;
+  }
+  .dev label{display:flex;flex-direction:column;gap:3px;font-family:var(--font-num);font-size:10px;color:var(--text-dim);}
+  .dev label b{color:var(--text);font-weight:500;font-variant-numeric:tabular-nums;}
+  .dev input[type=range]{width:100%;accent-color:var(--focus);}
+  [hidden]{display:none !important;}
+  @media (prefers-reduced-motion:reduce){*{transition:none !important;}}
+</style>
+</head>
+<body>
+<div class="rig">
+  <header class="rig-head">
+    <div class="rig-title">스택 디펜스 <span>· 코어 메커니즘 검증 리그</span></div>
+    <div class="rig-run" id="runLabel">RUN 1 / 3</div>
+  </header>
+
+  <div class="stage" id="stage">
+    <canvas id="cv"></canvas>
+
+    <div class="telemetry">
+      <div class="tele-row">
+        <span>WAVE</span><b id="tWave">1</b>
+        <span class="tele-spacer"></span>
+        <span>TIME</span><b id="tTime">0:00</b>
+        <span class="tele-spacer"></span>
+        <span>LV</span><b id="tLv">1</b>
+      </div>
+      <div class="bar hp"><i id="tHp" style="width:100%"></i></div>
+      <div class="bar xp"><i id="tXp" style="width:0%"></i></div>
+      <div class="tele-row focusrow" id="focusRow">
+        <span>집중</span><div class="bar fc"><i id="tFocus" style="width:100%"></i></div>
+      </div>
+    </div>
+
+    <div class="legend" id="legend"></div>
+    <div class="synbar" id="synbar"></div>
+    <div class="cards" id="cards" hidden></div>
+
+    <div class="overlay" id="startOv">
+      <div class="kicker">PROTO 002</div>
+      <h2>설명 없이 3판을 이어서 플레이해 주세요.</h2>
+      <p>아트와 성장 시스템은 일부러 하나도 없습니다. 도형만으로 손이 다시 가는지를 봅니다. 3판이 끝나면 결과 시트가 나옵니다.</p>
+      <div class="btnrow"><button class="btn" id="startBtn">시작</button></div>
+    </div>
+
+    <div class="overlay" id="resultOv" hidden></div>
+  </div>
+
+  <div class="rack">
+    <span class="racklabel">카드 모드</span>
+    <div class="seg" id="modeSeg">
+      <button type="button" data-mode="NONSTOP" aria-pressed="true">논스톱</button>
+      <button type="button" data-mode="SLOW" aria-pressed="false">슬로우</button>
+      <button type="button" data-mode="PAUSE" aria-pressed="false">정지</button>
+    </div>
+    <span style="flex:1"></span>
+    <div class="seg">
+      <button type="button" id="devBtn" aria-pressed="false">튜닝</button>
+      <button type="button" id="resetBtn" aria-pressed="false">세션 초기화</button>
+    </div>
+  </div>
+
+  <div class="dev" id="dev" hidden></div>
+</div>
+
+<script>
+(function(){
+"use strict";
+
+/* ─────────────────────────────────────────────────────────
+   스택 디펜스 — 코어 메커니즘 검증 리그
+   뷰: 세로 화면 · 사이드뷰(벨트스크롤). 기획서 컨셉 이미지 기준 —
+       동물 스택이 왼쪽에 서서 오른쪽으로 사격, 적은 오른쪽에서 왼쪽으로 몰려온다.
+   검증: H1 논스톱 카드 / H2 조합 깊이 / H3 집중 사격 / H4 긴장-해소
+   ───────────────────────────────────────────────────────── */
+
+const W = 540, H = 960;
+const FIELD_TOP = 150;          // HUD 아래, 적 분포 상한
+const GROUND_Y  = 648;          // 스택이 서 있는 지면선
+const FIELD_BOT = 664;          // 적 분포 하한
+const STACK_X   = 104;          // 스택의 x — 여기가 곧 방어선
+const LINE_X    = STACK_X + 20;
+const SPAWN_X   = W + 34;
+const SLOT_H = 46, SLOT_R = 19, MAX_SLOTS = 6;
+const RUNS_PER_SESSION = 3;
+const WAVE_LEN = 15;
+const RUN_CAP = 300;
+const DIFF = 1.3;               // 난이도 계수 — 적 체력에 곱한다 (0821 상향)
+const SCROLL_SPD = 44;          // 전진 체감 속도(px/s). 연출 전용 — 밸런스에 영향 없음
+
+/* ── 동물 4종 = 채널 4개 ───────────────────────────────── */
+const A = {
+  DOG:     {name:'개',     weap:'미니건', color:'#f2c14e', kind:'MINIGUN', cd:0.13, dmg:5.5, range:340, bspd:640},
+  CAT:     {name:'고양이', weap:'미사일', color:'#ff6b8b', kind:'MISSILE', cd:1.05, dmg:24,  range:430, bspd:320, blast:52, blastDmg:16},
+  DONKEY:  {name:'당나귀', weap:'레이저', color:'#5ad1e6', kind:'LASER',   cd:0,    dps:36,  range:470},
+  ROOSTER: {name:'수탉',   weap:'수류탄', color:'#8fd94a', kind:'GRENADE', cd:1.5,  dmg:14,  range:300, blast:84, blastDmg:44}
+};
+const KEYS = ['DOG','CAT','DONKEY','ROOSTER'];
+
+/* ── 인접 시너지: 스택 순서가 곧 빌드 ──────────────────── */
+const SYNS = {
+  'CAT|DOG':       {n:'속사장전', txt:'발사속도 +35%',            rate:0.35},
+  'DOG|DONKEY':    {n:'조준보정', txt:'데미지 +45%',              dmg:0.45},
+  'DOG|ROOSTER':   {n:'탄막전개', txt:'발사속도 +20% 폭발 +30%',  rate:0.20, blast:0.30},
+  'CAT|DONKEY':    {n:'유도강화', txt:'데미지 +30% 사거리 +25%',  dmg:0.30, range:0.25},
+  'CAT|ROOSTER':   {n:'연쇄폭발', txt:'폭발 데미지 +60%',         blastDmg:0.60},
+  'DONKEY|ROOSTER':{n:'과열',     txt:'데미지 +55%',              dmg:0.55}
+};
+const SAME_SYN = {n:'공명', txt:'데미지 +70%', dmg:0.70};
+
+/* ── 카드풀 12장 (합류 4 / 강화 6 / 시너지 2) ──────────── */
+const CARDS = [];
+KEYS.forEach(function(k){
+  CARDS.push({
+    id:'JOIN_'+k, kind:'합류', name:A[k].name+' 합류', accent:A[k].color,
+    desc:A[k].weap+' · 스택 맨 위에 올라탑니다',
+    pop:A[k].name+' 합류!',
+    avail:function(s){ return s.stack.length < MAX_SLOTS; },
+    apply:function(s){ s.stack.push({key:k, cd:0, beam:null, anim:0.5}); s.run.build.push(k); }
+  });
+});
+CARDS.push(
+  {id:'UP_RATE', kind:'강화', name:'연사', desc:'전체 발사속도 +22%', pop:'발사속도 +22%',
+   apply:function(s){ s.buff.rate *= 1.22; }},
+  {id:'UP_DMG', kind:'강화', name:'화력', desc:'전체 데미지 +25%', pop:'데미지 +25%',
+   apply:function(s){ s.buff.dmg *= 1.25; }},
+  {id:'UP_RANGE', kind:'강화', name:'사거리', desc:'전체 사거리 +25%', pop:'사거리 +25%',
+   apply:function(s){ s.buff.range *= 1.25; }},
+  {id:'UP_BLAST', kind:'강화', name:'폭발', desc:'폭발 반경 +40% · 폭발 데미지 +25%', pop:'폭발 +40%',
+   apply:function(s){ s.buff.blast *= 1.40; s.buff.blastDmg *= 1.25; }},
+  {id:'UP_FOCUS', kind:'강화', name:'집중', desc:'집중 게이지 회복 +60% · 집중 배율 +0.6', pop:'집중 강화!',
+   apply:function(s){ s.buff.focusRegen *= 1.6; s.buff.focusMult += 0.6; }},
+  {id:'UP_HP', kind:'강화', name:'방벽', desc:'최대 체력 +40 · 즉시 회복 30', pop:'체력 +40',
+   apply:function(s){ s.hpMax += 40; s.hp = Math.min(s.hpMax, s.hp + 30); }},
+  {id:'SYN_DOUBLE', kind:'시너지', name:'합주', accent:'#ffa62b', desc:'인접 시너지 효과 2배', pop:'시너지 2배!',
+   avail:function(s){ return s.stack.length >= 2; },
+   apply:function(s){ s.buff.syn *= 2; }},
+  {id:'SYN_FLIP', kind:'시너지', name:'역전', accent:'#ffa62b', desc:'스택 순서를 뒤집습니다 — 시너지 재구성', pop:'역전!',
+   avail:function(s){ return s.stack.length >= 2; },
+   apply:function(s){ s.stack.reverse(); }}
+);
+
+/* ── 튜닝 파라미터 ─────────────────────────────────────── */
+const TUNE = [
+  {id:'spawn',  label:'스폰 속도',     min:0.5, max:2.0, step:0.05, val:1.0},
+  {id:'hp',     label:'적 체력',       min:0.5, max:2.0, step:0.05, val:1.0},
+  {id:'xp',     label:'레벨업 필요량', min:0.5, max:2.0, step:0.05, val:1.0},
+  {id:'slow',   label:'슬로우 강도',   min:0.05,max:0.9, step:0.05, val:0.30},
+  {id:'focus',  label:'집중 배율',     min:1.0, max:4.0, step:0.1,  val:2.0}
+];
+const tune = {};
+TUNE.forEach(function(t){ tune[t.id] = t.val; });
+
+/* ── DOM ───────────────────────────────────────────────── */
+const $ = function(id){ return document.getElementById(id); };
+const stage = $('stage'), cv = $('cv'), ctx = cv.getContext('2d');
+const elWave=$('tWave'), elTime=$('tTime'), elLv=$('tLv'),
+      elHp=$('tHp'), elXp=$('tXp'), elFocus=$('tFocus'), elFocusRow=$('focusRow'),
+      elSyn=$('synbar'), elCards=$('cards'), elLegend=$('legend'),
+      elRunLabel=$('runLabel'), startOv=$('startOv'), resultOv=$('resultOv'),
+      devPanel=$('dev');
+
+let mode = 'NONSTOP';
+let session = { runs:[] };
+let s = null;
+let last = 0;
+
+function fit(){
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  cv.width  = Math.round(W * dpr);
+  cv.height = Math.round(H * dpr);
+  ctx.setTransform(cv.width / W, 0, 0, cv.height / H, 0, 0);
+}
+window.addEventListener('resize', fit);
+
+function toLogical(ev){
+  const r = stage.getBoundingClientRect();
+  return { x:(ev.clientX - r.left) / r.width * W, y:(ev.clientY - r.top) / r.height * H };
+}
+
+
+/* ── 동물 아이콘 ───────────────────────────────────────────────────────
+   글자(개/고/당/수) 대신 실루엣으로 그린다. 카드에서도 같은 함수를 쓴다. */
+function drawAnimal(g, key, cx, cy, r, color){
+  g.save();
+  g.translate(cx, cy);
+  g.fillStyle = color;
+  g.strokeStyle = color;
+  g.lineJoin = 'round';
+  if (key === 'DOG'){                       // 늘어진 귀
+    g.beginPath(); g.ellipse(-r*0.62,-r*0.05,r*0.2,r*0.44,0,0,6.284); g.fill();
+    g.beginPath(); g.ellipse( r*0.62,-r*0.05,r*0.2,r*0.44,0,0,6.284); g.fill();
+    g.beginPath(); g.arc(0,-r*0.05,r*0.52,0,6.284); g.fill();
+    g.beginPath(); g.ellipse(r*0.34,r*0.34,r*0.3,r*0.21,0,0,6.284); g.fill();
+  } else if (key === 'CAT'){                // 뾰족 귀 + 수염
+    g.beginPath(); g.moveTo(-r*0.62,-r*0.1); g.lineTo(-r*0.44,-r*0.78); g.lineTo(-r*0.12,-r*0.28); g.closePath(); g.fill();
+    g.beginPath(); g.moveTo( r*0.62,-r*0.1); g.lineTo( r*0.44,-r*0.78); g.lineTo( r*0.12,-r*0.28); g.closePath(); g.fill();
+    g.beginPath(); g.arc(0,r*0.08,r*0.5,0,6.284); g.fill();
+    g.lineWidth = Math.max(1, r*0.09);
+    g.beginPath();
+    g.moveTo(r*0.44,r*0.02); g.lineTo(r*0.95,-r*0.12);
+    g.moveTo(r*0.44,r*0.2);  g.lineTo(r*0.95,r*0.3);
+    g.stroke();
+  } else if (key === 'DONKEY'){             // 길쭉한 귀 + 긴 얼굴
+    g.beginPath(); g.ellipse(-r*0.34,-r*0.62,r*0.13,r*0.44,0.28,0,6.284); g.fill();
+    g.beginPath(); g.ellipse( r*0.14,-r*0.66,r*0.13,r*0.44,-0.22,0,6.284); g.fill();
+    g.beginPath(); g.ellipse(-r*0.06,r*0.02,r*0.4,r*0.5,0,0,6.284); g.fill();
+    g.beginPath(); g.ellipse(r*0.36,r*0.44,r*0.26,r*0.19,0,0,6.284); g.fill();
+  } else {                                   // ROOSTER — 볏 + 부리
+    g.beginPath();
+    g.moveTo(-r*0.34,-r*0.34); g.lineTo(-r*0.2,-r*0.82); g.lineTo(-r*0.03,-r*0.44);
+    g.lineTo(r*0.14,-r*0.84);  g.lineTo(r*0.3,-r*0.36);  g.closePath(); g.fill();
+    g.beginPath(); g.arc(0,r*0.06,r*0.46,0,6.284); g.fill();
+    g.beginPath(); g.moveTo(r*0.4,-r*0.06); g.lineTo(r*0.98,r*0.1); g.lineTo(r*0.4,r*0.24); g.closePath(); g.fill();
+  }
+  g.fillStyle = '#080b0e';                   // 눈
+  g.beginPath(); g.arc(r*0.17, key==='DONKEY' ? -r*0.06 : 0, Math.max(1.2, r*0.11), 0, 6.284); g.fill();
+  g.restore();
+}
+
+function drawMuzzle(g, kind, x, y, color){
+  g.fillStyle = color;
+  if (kind === 'MINIGUN'){
+    g.fillRect(x, y-4.2, 10, 2.2); g.fillRect(x, y-1.1, 10, 2.2); g.fillRect(x, y+2, 10, 2.2);
+  } else if (kind === 'MISSILE'){
+    g.beginPath(); g.moveTo(x, y-4.5); g.lineTo(x+11, y); g.lineTo(x, y+4.5); g.closePath(); g.fill();
+  } else if (kind === 'LASER'){
+    g.fillRect(x, y-1.7, 13, 3.4);
+  } else {
+    g.beginPath(); g.arc(x+5, y, 4.2, 0, 6.284); g.fill();
+  }
+}
+
+/* ── 연출 헬퍼 ────────────────────────────
+   그레이박스라도 타격감·성장 피드백이 없으면 '재미' 판정이 왜곡된다.
+   기획서 Q29(초 단위 = 타격감)·UT4-3(Dead Air 없음)에 해당하는 최소 연출만. */
+
+function makeScenery(){
+  const out = [];
+  for (let i=0;i<16;i++){
+    out.push({ far:i%2===0, x:Math.random()*W*2, w:14+Math.random()*30,
+               h:24+Math.random()*58, tri:Math.random()<0.45 });
+  }
+  return out;
+}
+
+function popNum(x, y, text, color, size){
+  /* 상한은 한 번에 잘라낸다. 항목마다 shift() 하면 O(n) 이동이 반복된다. */
+  if (s.nums.length >= 44) s.nums.splice(0, s.nums.length - 43);
+  s.nums.push({ x:x, y:y, text:String(text), c:color||'#dfe8ee', size:size||11,
+                t:0, life:0.85, vy:-30, vx:(Math.random()-0.5)*14 });
+}
+function sparks(x, y, n, color, spd){
+  if (s.parts.length + n > 160) s.parts.splice(0, s.parts.length + n - 160);
+  for (let i=0;i<n;i++){
+    const a = Math.random()*6.284, v = (spd||90)*(0.4+Math.random()*0.8);
+    s.parts.push({ x:x, y:y, vx:Math.cos(a)*v, vy:Math.sin(a)*v,
+                   t:0, life:0.25+Math.random()*0.3, c:color||'#dfe8ee', sz:1.5+Math.random()*1.8 });
+  }
+}
+
+/* ── 런 ────────────────────────────────────────────────── */
+function newRun(){
+  const idx = session.runs.length + 1;
+  const r = {
+    t:0, wave:1, waveT:0, spawnT:0, over:false,
+    hp:100, hpMax:100,
+    level:1, xp:0, xpNeed:17,
+    stack:[], enemies:[], bullets:[], fx:[], nums:[], parts:[],
+    scroll:0, scenery:makeScenery(), synKeys:[],
+    buff:{ rate:1, dmg:1, range:1, blast:1, blastDmg:1, syn:1, focusRegen:1, focusMult:tune.focus },
+    focus:{ on:false, g:100, x:W/2, y:H/2 },
+    cardsOpen:false, choices:[], shownAt:0, hpAtShow:0,
+    mods:[], chips:[],
+    run:{
+      idx:idx, mode:mode, build:[], picks:[], finalStack:[],
+      dur:0, wave:1, level:1, kills:0,
+      focusUses:0, focusSec:0, wavesNoFocus:0, wavesTotal:0,
+      minHpPct:100, hpLostInChoice:0, choiceMsTotal:0,
+      end:'사망'
+    },
+    focusUsedThisWave:false
+  };
+  /* 시작 동물 1마리 고정 지급 — 스택이 비면 처치가 안 되고, 처치가 없으면
+     레벨업도 없어 카드가 영원히 뜨지 않는다. 기획서 Q24의 "첫 동물이 미니건을
+     난사하는 첫 전멸"이 곧 시작 지점이기도 하다. */
+  r.stack.push({ key:'DOG', cd:0, beam:null, anim:0.5 });
+  r.run.build.push('DOG');
+  return r;
+}
+
+function computeMods(){
+  const n = s.stack.length;
+  const mods = [], chips = [];
+  for (let i=0;i<n;i++) mods.push({rate:0,dmg:0,range:0,blast:0,blastDmg:0});
+  for (let i=0;i<n-1;i++){
+    const a = s.stack[i].key, b = s.stack[i+1].key;
+    const def = (a===b) ? SAME_SYN : SYNS[[a,b].sort().join('|')];
+    if (!def) continue;
+    ['rate','dmg','range','blast','blastDmg'].forEach(function(f){
+      if (def[f]){ mods[i][f] += def[f]*s.buff.syn; mods[i+1][f] += def[f]*s.buff.syn; }
+    });
+    chips.push({ n:def.n, txt:def.txt, c2:A[b].color });
+  }
+  s.mods = mods; s.chips = chips;
+}
+
+/* 스택은 지면 위로 쌓인다 — 0번이 바닥(당나귀 자리). */
+function slotY(i){ return GROUND_Y - SLOT_R - i*SLOT_H; }
+
+/* ── 적 ────────────────────────────────────────────────── */
+function randY(){ return FIELD_TOP + 26 + Math.random()*(FIELD_BOT - FIELD_TOP - 46); }
+
+function spawnEnemy(){
+  const w = s.wave;
+  const base = (10 + w*7) * tune.hp * DIFF;
+  const roll = Math.random();
+  let e;
+  if (roll < 0.18 + Math.min(0.18, w*0.012)){
+    e = { type:'tank', hp:base*3.2, r:18, spd:22 + w*0.6, dmg:12, xp:8 };
+  } else if (roll < 0.48){
+    e = { type:'swarm', hp:base*0.42, r:8, spd:50 + w*1.4, dmg:3, xp:2 };
+  } else {
+    e = { type:'basic', hp:base, r:12, spd:34 + w*1.0, dmg:6, xp:3 };
+  }
+  e.spd = Math.min(e.spd, 78);
+  e.max = e.hp;
+  e.x = SPAWN_X;
+  e.y = randY();
+  s.enemies.push(e);
+}
+function spawnBoss(){
+  const w = s.wave, hp = (140 + w*95)*tune.hp*DIFF;
+  s.enemies.push({ type:'boss', hp:hp, max:hp, r:34, spd:20, dmg:45, xp:40,
+                   x:SPAWN_X + 20, y:(FIELD_TOP + FIELD_BOT)/2 });
+}
+
+function hurt(e, dmg){
+  e.hp -= dmg;
+  /* 탄마다 숫자를 띄우면 미니건 연사에 화면이 묻힌다. 0.28초 단위로 합산해 띄운다. */
+  e.pend = (e.pend || 0) + dmg;
+  if (e.hp <= 0 && !e.dead){
+    e.dead = true;
+    s.run.kills++;
+    gainXp(e.xp);
+    const big = e.type === 'boss' || e.type === 'tank';
+    popNum(e.x, e.y - e.r - 4, Math.round(e.pend), big ? '#ffd166' : '#dfe8ee', big ? 15 : 12);
+    e.pend = 0;
+    s.fx.push({ x:e.x, y:e.y, r:e.r, max:e.r*2.6, life:0.26, t:0, c:'#8fa3ad' });
+    sparks(e.x, e.y, big ? 14 : 6, big ? '#ffd166' : '#9fb2bd', big ? 150 : 95);
+  }
+}
+function blast(x, y, radius, dmg){
+  s.fx.push({ x:x, y:y, r:radius*0.35, max:radius, life:0.3, t:0, c:'#ffa62b' });
+  sparks(x, y, 9, '#ffa62b', 130);
+  for (let i=0;i<s.enemies.length;i++){
+    const e = s.enemies[i];
+    if (e.dead) continue;
+    const dx = e.x-x, dy = e.y-y;
+    if (dx*dx + dy*dy <= radius*radius) hurt(e, dmg);
+  }
+}
+
+function gainXp(v){
+  if (s.over) return;
+  s.xp += v;
+  if (s.xp >= s.xpNeed && !s.cardsOpen){
+    s.xp -= s.xpNeed;
+    s.level++;
+    s.xpNeed = Math.round((10 + s.level*7) * tune.xp);
+    openCards();
+  }
+}
+
+/* ── 카드 ──────────────────────────────────────────────── */
+function openCards(){
+  const bag = CARDS.filter(function(c){ return !c.avail || c.avail(s); });
+  const pick = [];
+  while (pick.length < 3 && bag.length){
+    pick.push(bag.splice(Math.floor(Math.random()*bag.length), 1)[0]);
+  }
+  s.choices = pick;
+  s.cardsOpen = true;
+  s.shownAt = performance.now();
+  s.hpAtShow = s.hp;
+  elCards.innerHTML = '';
+  pick.forEach(function(c, i){
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'card';
+    b.style.setProperty('--accent', c.accent || '#71858f');
+    b.innerHTML = '<span class="kind"></span><span class="name"></span><span class="desc"></span>';
+    b.querySelector('.kind').textContent = c.kind;
+    /* 합류 카드는 어떤 동물인지 한눈에 보여야 한다 — 논스톱에서 읽는 시간이 곧 피해다 */
+    if (c.id.indexOf('JOIN_') === 0){
+      const ic = document.createElement('canvas');
+      ic.width = 52; ic.height = 52;
+      ic.className = 'cardicon';
+      const g = ic.getContext('2d');
+      g.scale(2, 2);
+      drawAnimal(g, c.id.slice(5), 13, 13, 11, c.accent);
+      b.insertBefore(ic, b.firstChild);
+    }
+    b.querySelector('.name').textContent = c.name;
+    b.querySelector('.desc').textContent = c.desc;
+    b.addEventListener('click', function(ev){ ev.stopPropagation(); pickCard(i); });
+    elCards.appendChild(b);
+  });
+  elCards.hidden = false;
+}
+
+function pickCard(i){
+  if (!s.cardsOpen) return;
+  const c = s.choices[i];
+  const ms = performance.now() - s.shownAt;
+  const lost = Math.max(0, s.hpAtShow - s.hp);
+  s.run.picks.push({ t:+s.t.toFixed(1), id:c.id, name:c.name, kind:c.kind,
+                     ms:Math.round(ms), hpLost:+lost.toFixed(1), mode:mode });
+  s.run.choiceMsTotal += ms;
+  s.run.hpLostInChoice += lost;
+  const before = s.chips.map(function(x){ return x.n; }).join('|');
+  c.apply(s);
+  computeMods();
+  /* 고른 카드가 무엇을 바꿨는지 안 보이면 3택 자체가 무의미해진다. */
+  const topY = slotY(Math.max(0, s.stack.length-1)) - 34;
+  popNum(STACK_X + 30, topY, c.pop || c.name, c.accent || '#c6d3da', 14);
+  s.fx.push({ x:STACK_X, y:topY+22, r:10, max:70, life:0.45, t:0, c:c.accent || '#c6d3da' });
+  if (c.kind === '합류') sparks(STACK_X, slotY(s.stack.length-1), 12, c.accent, 120);
+  /* 새로 성립한 인접 시너지는 따로 알려준다 */
+  if (s.chips.map(function(x){ return x.n; }).join('|') !== before){
+    for (let i=0;i<s.chips.length;i++){
+      const mid = (slotY(i) + slotY(i+1)) / 2;
+      popNum(STACK_X - 48, mid, s.chips[i].n, '#ffa62b', 12);
+      s.fx.push({ x:STACK_X, y:mid, r:8, max:52, life:0.5, t:0, c:'#ffa62b' });
+    }
+  }
+  s.cardsOpen = false;
+  elCards.hidden = true;
+  elCards.innerHTML = '';
+  if (s.xp >= s.xpNeed) gainXp(0);
+}
+
+/* ── 사격 ──────────────────────────────────────────────── */
+function nearestTo(x, y, maxD){
+  let best = null, bd = maxD*maxD;
+  for (let i=0;i<s.enemies.length;i++){
+    const e = s.enemies[i];
+    if (e.dead) continue;
+    const dx = e.x-x, dy = e.y-y, d = dx*dx + dy*dy;
+    if (d < bd){ bd = d; best = e; }
+  }
+  return best;
+}
+
+function fireAll(dt){
+  const fo = s.focus.on;
+  const fmul = fo ? s.buff.focusMult : 1;
+  for (let i=0;i<s.stack.length;i++){
+    const unit = s.stack[i], def = A[unit.key];
+    const m = s.mods[i] || {rate:0,dmg:0,range:0,blast:0,blastDmg:0};
+    const ux = STACK_X, uy = slotY(i);
+    const range = def.range * s.buff.range * (1 + m.range);
+    const dmgMul = s.buff.dmg * (1 + m.dmg) * fmul;
+
+    let target = null;
+    if (fo){
+      const anchor = nearestTo(s.focus.x, s.focus.y, 260);
+      if (anchor){
+        const dx = anchor.x-ux, dy = anchor.y-uy;
+        if (dx*dx + dy*dy <= (range*1.45)*(range*1.45)) target = anchor;
+      }
+    }
+    if (!target) target = nearestTo(ux, uy, range);
+
+    if (def.kind === 'LASER'){
+      unit.beam = target;
+      if (target){
+        const dps = def.dps * dmgMul * dt;
+        const ang = Math.atan2(target.y-uy, target.x-ux);
+        const nx = Math.cos(ang), ny = Math.sin(ang);
+        for (let k=0;k<s.enemies.length;k++){
+          const e = s.enemies[k];
+          if (e.dead) continue;
+          const px = e.x-ux, py = e.y-uy;
+          const proj = px*nx + py*ny;
+          if (proj < 0 || proj > range*1.5) continue;
+          if (Math.abs(px*ny - py*nx) <= e.r + 9) hurt(e, dps);
+        }
+      }
+      continue;
+    }
+
+    unit.cd -= dt * s.buff.rate * (1 + m.rate);
+    if (unit.cd > 0 || !target) continue;
+    unit.cd = def.cd;
+
+    const ang = Math.atan2(target.y-uy, target.x-ux);
+    if (def.kind === 'MINIGUN'){
+      s.bullets.push({ k:'b', x:ux, y:uy, vx:Math.cos(ang)*def.bspd, vy:Math.sin(ang)*def.bspd,
+                       dmg:def.dmg*dmgMul, r:3, c:def.color, life:1.6 });
+    } else if (def.kind === 'MISSILE'){
+      s.bullets.push({ k:'m', x:ux, y:uy, tg:target, spd:def.bspd, ang:ang,
+                       dmg:def.dmg*dmgMul, r:4, c:def.color, life:3,
+                       blast:def.blast*s.buff.blast*(1+m.blast),
+                       blastDmg:def.blastDmg*s.buff.blastDmg*dmgMul*(1+m.blastDmg) });
+    } else if (def.kind === 'GRENADE'){
+      s.bullets.push({ k:'g', x0:ux, y0:uy, x:ux, y:uy, tx:target.x, ty:target.y,
+                       t:0, dur:Math.max(0.35, Math.hypot(target.x-ux, target.y-uy)/460),
+                       dmg:def.dmg*dmgMul, r:5, c:def.color,
+                       blast:def.blast*s.buff.blast*(1+m.blast),
+                       blastDmg:def.blastDmg*s.buff.blastDmg*dmgMul*(1+m.blastDmg) });
+    }
+  }
+}
+
+function hitTest(x, y, r){
+  for (let i=0;i<s.enemies.length;i++){
+    const e = s.enemies[i];
+    if (e.dead) continue;
+    const dx = e.x-x, dy = e.y-y, rr = e.r + r;
+    if (dx*dx + dy*dy <= rr*rr) return e;
+  }
+  return null;
+}
+
+/* 한 프레임의 이동 구간 전체로 충돌을 본다. 점 충돌만 보면 미니건 탄(640px/s)이
+   프레임당 11px 이상 이동해 반경 8px짜리 소형 적을 그냥 통과해 버린다. */
+function hitSwept(x0, y0, x1, y1, r){
+  const dx = x1-x0, dy = y1-y0, len2 = dx*dx + dy*dy;
+  for (let i=0;i<s.enemies.length;i++){
+    const e = s.enemies[i];
+    if (e.dead) continue;
+    let t = len2 > 0 ? ((e.x-x0)*dx + (e.y-y0)*dy) / len2 : 0;
+    if (t < 0) t = 0; else if (t > 1) t = 1;
+    const cx = x0 + dx*t - e.x, cy = y0 + dy*t - e.y, rr = e.r + r;
+    if (cx*cx + cy*cy <= rr*rr) return e;
+  }
+  return null;
+}
+
+/* ── 업데이트 ──────────────────────────────────────────── */
+function update(dt){
+  s.t += dt;
+  s.scroll += SCROLL_SPD * dt;   // 전진 체감(연출 전용)
+
+  /* 합류 등장 애니메이션 — 끝나는 순간 착지 링 */
+  for (let i=0;i<s.stack.length;i++){
+    const u = s.stack[i];
+    if (u.anim > 0){
+      u.anim -= dt;
+      if (u.anim <= 0){
+        u.anim = 0;
+        s.fx.push({ x:STACK_X, y:slotY(i), r:6, max:44, life:0.3, t:0, c:A[u.key].color });
+        sparks(STACK_X, slotY(i)+SLOT_R, 8, A[u.key].color, 80);
+      }
+    }
+  }
+
+  s.waveT += dt;
+  if (s.waveT >= WAVE_LEN){
+    s.waveT = 0;
+    s.run.wavesTotal++;
+    if (!s.focusUsedThisWave) s.run.wavesNoFocus++;
+    s.focusUsedThisWave = false;
+    s.wave++;
+    if (s.wave % 5 === 0) spawnBoss();
+  }
+  /* 발밑 먼지 — 왼쪽으로 흘려 전진을 거든다 */
+  s.dustT = (s.dustT || 0) - dt;
+  if (s.dustT <= 0){
+    s.dustT = 0.13;
+    if (s.parts.length < 150){
+      s.parts.push({ x:STACK_X - 6, y:GROUND_Y - 2,
+                     vx:-38 - Math.random()*34, vy:-6 - Math.random()*14,
+                     t:0, life:0.45 + Math.random()*0.25, c:'#31404a',
+                     sz:1.6 + Math.random()*1.8 });
+    }
+  }
+
+  s.spawnT -= dt;
+  if (s.spawnT <= 0){
+    s.spawnT = Math.max(0.20, 1.15 - s.wave*0.052) / tune.spawn;
+    spawnEnemy();
+  }
+
+  if (s.focus.on){
+    s.focus.g -= 34*dt;
+    s.run.focusSec += dt;
+    s.focusUsedThisWave = true;
+    if (s.focus.g <= 0){ s.focus.g = 0; s.focus.on = false; }
+  } else {
+    s.focus.g = Math.min(100, s.focus.g + 11*dt*s.buff.focusRegen);
+  }
+
+  fireAll(dt);
+
+  for (let i=s.bullets.length-1;i>=0;i--){
+    const b = s.bullets[i];
+    b.life -= dt;
+    let done = b.life <= 0;
+    if (b.k === 'b'){
+      const px = b.x, py = b.y;
+      b.x += b.vx*dt; b.y += b.vy*dt;
+      if (b.x > W+24 || b.y < -24 || b.y > H+24) done = true;
+      else { const e = hitSwept(px, py, b.x, b.y, b.r); if (e){ hurt(e, b.dmg); done = true; } }
+    } else if (b.k === 'm'){
+      if (b.tg && !b.tg.dead){
+        const want = Math.atan2(b.tg.y-b.y, b.tg.x-b.x);
+        let d = want - b.ang;
+        while (d > Math.PI) d -= Math.PI*2;
+        while (d < -Math.PI) d += Math.PI*2;
+        b.ang += Math.max(-5*dt, Math.min(5*dt, d));
+      }
+      const px = b.x, py = b.y;
+      b.x += Math.cos(b.ang)*b.spd*dt;
+      b.y += Math.sin(b.ang)*b.spd*dt;
+      const e = hitSwept(px, py, b.x, b.y, b.r);
+      if (e){ hurt(e, b.dmg); blast(b.x, b.y, b.blast, b.blastDmg); done = true; }
+      else if (b.x > W+30) done = true;
+    } else if (b.k === 'g'){
+      b.t += dt;
+      const p = Math.min(1, b.t/b.dur);
+      b.x = b.x0 + (b.tx-b.x0)*p;
+      b.y = b.y0 + (b.ty-b.y0)*p - Math.sin(p*Math.PI)*80;
+      if (p >= 1){ blast(b.tx, b.ty, b.blast, b.blastDmg + b.dmg); done = true; }
+    }
+    if (done) s.bullets.splice(i,1);
+  }
+
+  /* 적은 오른쪽에서 왼쪽으로 밀고 들어온다. 스택 앞을 넘으면 누수. */
+  for (let i=s.enemies.length-1;i>=0;i--){
+    const e = s.enemies[i];
+    if (e.dead){ s.enemies.splice(i,1); continue; }
+    e.x -= e.spd*dt;
+    if (e.pend > 0){
+      e.pendT = (e.pendT || 0) + dt;
+      if (e.pendT >= 0.28){
+        popNum(e.x, e.y - e.r - 4, Math.round(e.pend), '#b8c6cf', 11);
+        e.pend = 0; e.pendT = 0;
+      }
+    }
+    if (e.x <= LINE_X){
+      s.hp -= e.dmg;
+      s.fx.push({ x:LINE_X, y:e.y, r:6, max:34, life:0.3, t:0, c:'#ff4d55' });
+      s.enemies.splice(i,1);
+    }
+  }
+
+  for (let i=s.fx.length-1;i>=0;i--){
+    const f = s.fx[i];
+    f.t += dt;
+    if (f.t >= f.life) s.fx.splice(i,1);
+  }
+  for (let i=s.nums.length-1;i>=0;i--){
+    const n = s.nums[i];
+    n.t += dt; n.x += n.vx*dt; n.y += n.vy*dt; n.vy += 46*dt;
+    if (n.t >= n.life) s.nums.splice(i,1);
+  }
+  for (let i=s.parts.length-1;i>=0;i--){
+    const q = s.parts[i];
+    q.t += dt; q.x += q.vx*dt; q.y += q.vy*dt; q.vy += 190*dt; q.vx *= 0.96;
+    if (q.t >= q.life) s.parts.splice(i,1);
+  }
+
+  const pct = s.hp / s.hpMax * 100;
+  if (pct < s.run.minHpPct) s.run.minHpPct = Math.max(0, pct);
+  if (s.hp <= 0) endRun('사망');
+  else if (s.t >= RUN_CAP) endRun('생존');
+}
+
+/* ── 드로잉 ────────────────────────────────────────────── */
+function draw(){
+  ctx.fillStyle = '#080b0e';
+  ctx.fillRect(0,0,W,H);
+
+  /* 배경 실루엣이 왼쪽으로 흘러 우리가 오른쪽으로 전진하는 느낌을 만든다 */
+  for (let i=0;i<s.scenery.length;i++){
+    const it = s.scenery[i], par = it.far ? 0.32 : 0.78;
+    let x = (it.x - s.scroll*par) % (W*2);
+    if (x < 0) x += W*2;
+    if (x > W + it.w + 10) x -= W*2;
+    const baseY = it.far ? GROUND_Y - 56 : GROUND_Y;
+    ctx.fillStyle = it.far ? '#141d26' : '#1d2b35';
+    if (it.tri){
+      ctx.beginPath();
+      ctx.moveTo(x, baseY); ctx.lineTo(x + it.w/2, baseY - it.h); ctx.lineTo(x + it.w, baseY);
+      ctx.closePath(); ctx.fill();
+    } else {
+      ctx.fillRect(x, baseY - it.h, it.w, it.h);
+    }
+  }
+
+  /* 지면 깊이선 — 대시가 왼쪽으로 흘러 전진을 드러낸다 */
+  ctx.strokeStyle = 'rgba(36,48,57,.62)';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([18, 14]);
+  ctx.lineDashOffset = s.scroll;
+  for (let y=FIELD_TOP+70; y<FIELD_BOT; y+=76){
+    ctx.beginPath(); ctx.moveTo(0, y+.5); ctx.lineTo(W, y+.5); ctx.stroke();
+  }
+  ctx.setLineDash([]);
+  ctx.lineDashOffset = 0;
+  ctx.strokeStyle = 'rgba(72,87,95,.9)';
+  ctx.beginPath(); ctx.moveTo(0, GROUND_Y+.5); ctx.lineTo(W, GROUND_Y+.5); ctx.stroke();
+
+  /* 위험대 — 스택 뒤쪽(왼쪽) */
+  const g = ctx.createLinearGradient(LINE_X, 0, LINE_X+120, 0);
+  g.addColorStop(0, 'rgba(255,77,85,.13)');
+  g.addColorStop(1, 'rgba(255,77,85,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(LINE_X, FIELD_TOP, 120, FIELD_BOT-FIELD_TOP);
+
+  /* 방어선 — 세로 */
+  ctx.strokeStyle = 'rgba(255,77,85,.75)';
+  ctx.setLineDash([7,6]);
+  ctx.beginPath(); ctx.moveTo(LINE_X+.5, FIELD_TOP); ctx.lineTo(LINE_X+.5, FIELD_BOT); ctx.stroke();
+  ctx.setLineDash([]);
+
+  /* 레이저 */
+  for (let i=0;i<s.stack.length;i++){
+    const u = s.stack[i];
+    if (A[u.key].kind !== 'LASER' || !u.beam || u.beam.dead) continue;
+    const uy = slotY(i);
+    ctx.strokeStyle = A.DONKEY.color;
+    ctx.globalAlpha = .28; ctx.lineWidth = 12;
+    ctx.beginPath(); ctx.moveTo(STACK_X, uy); ctx.lineTo(u.beam.x, u.beam.y); ctx.stroke();
+    ctx.globalAlpha = .95; ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.moveTo(STACK_X, uy); ctx.lineTo(u.beam.x, u.beam.y); ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+
+  /* 적 */
+  for (let i=0;i<s.enemies.length;i++){
+    const e = s.enemies[i];
+    if (e.type === 'boss'){
+      ctx.fillStyle = '#c2455a';
+      ctx.beginPath(); ctx.arc(e.x, e.y, e.r, 0, 6.284); ctx.fill();
+      ctx.strokeStyle = '#ff8b9c'; ctx.lineWidth = 2; ctx.stroke();
+    } else if (e.type === 'tank'){
+      ctx.fillStyle = '#5b6f7c';
+      ctx.fillRect(e.x-e.r, e.y-e.r, e.r*2, e.r*2);
+      ctx.strokeStyle = '#8fa9b8'; ctx.lineWidth = 1.5;
+      ctx.strokeRect(e.x-e.r, e.y-e.r, e.r*2, e.r*2);
+    } else if (e.type === 'swarm'){
+      ctx.fillStyle = '#7e8fa0';
+      ctx.beginPath(); ctx.arc(e.x, e.y, e.r, 0, 6.284); ctx.fill();
+    } else {
+      ctx.fillStyle = '#46586a';
+      ctx.fillRect(e.x-e.r*0.85, e.y-e.r, e.r*1.7, e.r*2);
+      ctx.strokeStyle = '#6d8496'; ctx.lineWidth = 1;
+      ctx.strokeRect(e.x-e.r*0.85, e.y-e.r, e.r*1.7, e.r*2);
+    }
+    if (e.hp < e.max){
+      ctx.fillStyle = 'rgba(0,0,0,.55)';
+      ctx.fillRect(e.x-e.r, e.y-e.r-7, e.r*2, 3);
+      ctx.fillStyle = '#ff4d55';
+      ctx.fillRect(e.x-e.r, e.y-e.r-7, e.r*2*Math.max(0,e.hp/e.max), 3);
+    }
+  }
+
+  /* 탄 */
+  for (let i=0;i<s.bullets.length;i++){
+    const b = s.bullets[i];
+    ctx.fillStyle = b.c;
+    if (b.k === 'b'){
+      ctx.save();
+      ctx.translate(b.x, b.y);
+      ctx.rotate(Math.atan2(b.vy, b.vx));
+      ctx.fillRect(-5, -1.5, 10, 3);
+      ctx.restore();
+    } else {
+      ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, 6.284); ctx.fill();
+    }
+  }
+
+  /* 이펙트 */
+  for (let i=0;i<s.fx.length;i++){
+    const f = s.fx[i], p = f.t/f.life;
+    ctx.globalAlpha = (1-p)*.8;
+    ctx.strokeStyle = f.c; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(f.x, f.y, f.r + (f.max-f.r)*p, 0, 6.284); ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+
+  /* 인접 시너지 연결선 — 스택 왼쪽 */
+  for (let i=0;i<s.stack.length-1;i++){
+    const m = s.mods[i];
+    if (!m || !(m.rate||m.dmg||m.range||m.blast||m.blastDmg)) continue;
+    const lx = STACK_X - SLOT_R - 8;
+    const pulse = 0.5 + 0.5*Math.sin(s.t*5 - i*0.8);
+    ctx.strokeStyle = 'rgba(255,166,43,' + (0.35 + pulse*0.55).toFixed(2) + ')';
+    ctx.lineWidth = 1.5 + pulse*1.6;
+    ctx.beginPath(); ctx.moveTo(lx, slotY(i)); ctx.lineTo(lx, slotY(i+1)); ctx.stroke();
+    /* 두 칸 사이를 오가는 점 — 시너지가 '돌고 있다'는 신호 */
+    const tt = (s.t*0.9 + i*0.33) % 1;
+    ctx.fillStyle = '#ffd166';
+    ctx.beginPath();
+    ctx.arc(lx, slotY(i) + (slotY(i+1)-slotY(i))*tt, 2.2 + pulse*1.4, 0, 6.284);
+    ctx.fill();
+  }
+
+  /* 스택 — 지면 위로 쌓인 동물들, 총구는 오른쪽 */
+  for (let i=0;i<s.stack.length;i++){
+    const u = s.stack[i], def = A[u.key];
+    const bob = Math.sin(s.t*7 + i*0.7) * 1.7;                       // 걷는 느낌
+    const rise = u.anim > 0 ? -Math.pow(u.anim/0.5, 2) * 95 : 0;     // 합류 등장
+    const y = slotY(i) + bob + rise;
+    if (u.anim > 0) ctx.globalAlpha = Math.max(0.2, 1 - u.anim/0.5);
+    ctx.fillStyle = def.color;
+    ctx.fillRect(STACK_X-SLOT_R, y-SLOT_R, SLOT_R*2, SLOT_R*2);
+    ctx.fillStyle = 'rgba(8,11,14,.88)';
+    ctx.fillRect(STACK_X-SLOT_R+2.5, y-SLOT_R+2.5, SLOT_R*2-5, SLOT_R*2-5);
+    drawAnimal(ctx, u.key, STACK_X, y, SLOT_R*0.76, def.color);
+    drawMuzzle(ctx, def.kind, STACK_X+SLOT_R, y, def.color);
+    ctx.globalAlpha = 1;
+  }
+
+  /* 파티클 */
+  for (let i=0;i<s.parts.length;i++){
+    const q = s.parts[i];
+    ctx.globalAlpha = Math.max(0, 1 - q.t/q.life);
+    ctx.fillStyle = q.c;
+    ctx.fillRect(q.x - q.sz/2, q.y - q.sz/2, q.sz, q.sz);
+  }
+  ctx.globalAlpha = 1;
+
+  /* 숫자 — 어두운 외곽선을 둘러 어떤 배경에서도 읽히게 한다 */
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.lineJoin = 'round';
+  for (let i=0;i<s.nums.length;i++){
+    const n = s.nums[i], p = n.t/n.life;
+    ctx.globalAlpha = p < 0.75 ? 1 : (1-p)/0.25;
+    ctx.font = '600 ' + n.size + 'px "IBM Plex Sans KR",sans-serif';
+    ctx.strokeStyle = 'rgba(4,7,9,.85)'; ctx.lineWidth = 3.5;
+    ctx.strokeText(n.text, n.x, n.y);
+    ctx.fillStyle = n.c;
+    ctx.fillText(n.text, n.x, n.y);
+  }
+  ctx.globalAlpha = 1;
+  ctx.lineWidth = 1;
+  ctx.textAlign = 'start';
+  ctx.textBaseline = 'alphabetic';
+
+  /* 집중 조준점 */
+  if (s.focus.on){
+    ctx.strokeStyle = '#ffa62b'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(s.focus.x, s.focus.y, 26, 0, 6.284); ctx.stroke();
+    ctx.globalAlpha = .5;
+    ctx.beginPath(); ctx.arc(s.focus.x, s.focus.y, 40, 0, 6.284); ctx.stroke();
+    ctx.globalAlpha = 1;
+    ctx.beginPath();
+    ctx.moveTo(s.focus.x-34, s.focus.y); ctx.lineTo(s.focus.x-14, s.focus.y);
+    ctx.moveTo(s.focus.x+14, s.focus.y); ctx.lineTo(s.focus.x+34, s.focus.y);
+    ctx.stroke();
+  }
+}
+
+/* ── HUD ───────────────────────────────────────────────── */
+function fmt(t){
+  const m = Math.floor(t/60), sec = Math.floor(t%60);
+  return m + ':' + (sec<10?'0':'') + sec;
+}
+function syncHud(){
+  elWave.textContent = s.wave;
+  elTime.textContent = fmt(s.t);
+  elLv.textContent = s.level;
+  elHp.style.width = Math.max(0, s.hp/s.hpMax*100) + '%';
+  elXp.style.width = Math.min(100, s.xp/s.xpNeed*100) + '%';
+  elFocus.style.width = s.focus.g + '%';
+  elFocusRow.classList.toggle('hot', s.focus.on);
+
+  let html = '';
+  for (let i=0;i<s.chips.length;i++){
+    const c = s.chips[i];
+    html += '<span class="syn" style="border-color:'+c.c2+'55"><b>'+c.n+'</b> '+c.txt+'</span>';
+  }
+  if (elSyn._cache !== html){ elSyn.innerHTML = html; elSyn._cache = html; }
+
+  let lg = '';
+  KEYS.forEach(function(k){
+    const owned = s.stack.some(function(u){ return u.key===k; });
+    lg += '<div style="opacity:'+(owned?1:.35)+'"><i style="background:'+A[k].color+'"></i>'+A[k].name+'</div>';
+  });
+  if (elLegend._cache !== lg){ elLegend.innerHTML = lg; elLegend._cache = lg; }
+}
+
+function loop(now){
+  requestAnimationFrame(loop);
+  /* 상한은 탭 전환 후 한 프레임에 몇 초가 튀는 것을 막기 위한 것. 다만 너무 낮으면
+     저사양 폰에서 게임 시간이 실제보다 느려져 기기별 난이도가 달라진다(측정 오염). */
+  const dtReal = Math.min(0.1, (now - last)/1000 || 0);
+  last = now;
+  if (!s || s.over) return;
+  let scale = 1;
+  if (s.cardsOpen) scale = mode==='NONSTOP' ? 1 : (mode==='SLOW' ? tune.slow : 0);
+  if (scale > 0) update(dtReal * scale);
+  draw();
+  syncHud();
+}
+
+/* ── 결과 ──────────────────────────────────────────────── */
+function endRun(reason){
+  if (s.over) return;
+  s.over = true;
+  s.cardsOpen = false;
+  elCards.hidden = true;
+  elCards.innerHTML = '';
+  const r = s.run;
+  r.end = reason;
+  r.dur = +s.t.toFixed(1);
+  r.wave = s.wave;
+  r.level = s.level;
+  r.minHpPct = +r.minHpPct.toFixed(1);
+  r.hpLostInChoice = +r.hpLostInChoice.toFixed(1);
+  r.focusSec = +r.focusSec.toFixed(1);
+  r.avgChoiceMs = r.picks.length ? Math.round(r.choiceMsTotal / r.picks.length) : 0;
+  r.finalStack = s.stack.map(function(u){ return u.key; });
+  session.runs.push(r);
+  showResult();
+}
+
+function buildStr(arr){
+  return arr.length ? arr.map(function(k){ return A[k].name; }).join(' › ') : '없음';
+}
+function row(k, v){ return '<tr><td>'+k+'</td><td>'+v+'</td></tr>'; }
+
+function showResult(){
+  const n = session.runs.length;
+  const r = session.runs[n-1];
+  const done = n >= RUNS_PER_SESSION;
+  let h = '';
+  h += '<div class="kicker">RUN '+r.idx+' · '+r.end+'</div>';
+  h += '<h2>'+r.wave+'웨이브까지 · '+fmt(r.dur)+'</h2>';
+  h += '<div class="buildline">획득 순서 &nbsp;<b>'+buildStr(r.build)+'</b></div>';
+  h += '<div class="buildline">최종 스택(아래→위) &nbsp;<b>'+buildStr(r.finalStack)+'</b></div>';
+  h += '<div class="sheetwrap"><table class="sheet"><tbody>';
+  h += row('카드 선택 평균 소요', r.avgChoiceMs + ' ms');
+  h += row('선택 중 잃은 체력', r.hpLostInChoice + ' (H1)');
+  h += row('집중 사격 사용', r.focusUses + '회 / ' + r.focusSec + '초 (H3)');
+  h += row('집중 없이 넘긴 웨이브', r.wavesNoFocus + ' / ' + r.wavesTotal + ' (H3)');
+  h += row('최저 체력', r.minHpPct + '% (H4)');
+  h += row('처치', r.kills);
+  h += '</tbody></table></div>';
+
+  if (!done){
+    h += '<p>계속해서 다음 판을 플레이해 주세요. '+(RUNS_PER_SESSION-n)+'판 남았습니다.</p>';
+    h += '<div class="btnrow"><button class="btn" id="nextBtn">RUN '+(n+1)+' 시작</button></div>';
+  } else {
+    h += '<div class="verdict">'+verdict()+'</div>';
+    h += '<p>아래 텍스트를 전체 선택해 진행자에게 전달해 주세요.</p>';
+    h += '<textarea readonly rows="4" id="dump" style="width:100%;font-family:var(--font-num);font-size:9.5px;background:#0c1116;color:#71858f;border:1px solid #243039;padding:7px"></textarea>';
+    h += '<div class="btnrow"><button class="btn" id="copyBtn">결과 복사</button>'+
+         '<button class="btn ghost" id="againBtn">새 세션</button></div>';
+  }
+  resultOv.innerHTML = h;
+  resultOv.hidden = false;
+
+  if (!done){
+    $('nextBtn').addEventListener('click', startRun);
+  } else {
+    $('dump').value = JSON.stringify(session.runs);
+    $('copyBtn').addEventListener('click', function(){
+      const ta = $('dump'), btn = $('copyBtn');
+      ta.select();
+      ta.setSelectionRange(0, ta.value.length);
+      const ok = function(){ btn.textContent = '복사됨'; };
+      /* iOS 사파리는 클립보드 API를 거부할 수 있다. 실패를 삼키면 '복사됨'만 뜨고
+         테스터는 빈 클립보드를 붙여넣게 된다. */
+      const legacy = function(){
+        let done = false;
+        try { done = document.execCommand('copy'); } catch(err){ done = false; }
+        btn.textContent = done ? '복사됨' : '복사 실패 — 위 텍스트를 직접 선택해 주세요';
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText){
+        navigator.clipboard.writeText(ta.value).then(ok, legacy);
+      } else legacy();
+    });
+    $('againBtn').addEventListener('click', function(){ session = {runs:[]}; startRun(); });
+  }
+}
+
+function verdict(){
+  const R = session.runs;
+  const avgMs = Math.round(R.reduce(function(a,x){ return a+x.avgChoiceMs; },0)/R.length);
+  const lost = (R.reduce(function(a,x){ return a+x.hpLostInChoice; },0)/R.length).toFixed(1);
+  const distinct = new Set(R.map(function(x){ return x.build.join('>'); })).size;
+  const noFocusW = R.reduce(function(a,x){ return a+x.wavesNoFocus; },0);
+  const totW = R.reduce(function(a,x){ return a+x.wavesTotal; },0);
+  const minHp = Math.min.apply(null, R.map(function(x){ return x.minHpPct; }));
+  return 'H1 카드 선택 평균 '+avgMs+'ms · 선택 중 평균 체력 손실 '+lost+'<br>'+
+         'H2 3판 빌드 구성 '+distinct+'/3 서로 다름<br>'+
+         'H3 집중 없이 넘긴 웨이브 '+noFocusW+'/'+totW+'<br>'+
+         'H4 세션 최저 체력 '+minHp+'%';
+}
+
+/* ── 시작 / 입력 ───────────────────────────────────────── */
+function startRun(){
+  s = newRun();
+  s.buff.focusMult = tune.focus;
+  computeMods();
+  startOv.hidden = true;
+  resultOv.hidden = true;
+  elRunLabel.textContent = 'RUN ' + s.run.idx + ' / ' + RUNS_PER_SESSION;
+  last = performance.now();
+  fit();
+}
+
+$('startBtn').addEventListener('click', startRun);
+
+$('modeSeg').addEventListener('click', function(e){
+  const b = e.target.closest('button');
+  if (!b) return;
+  mode = b.dataset.mode;
+  Array.prototype.forEach.call(this.querySelectorAll('button'), function(x){
+    x.setAttribute('aria-pressed', String(x === b));
+  });
+});
+
+$('resetBtn').addEventListener('click', function(){
+  session = { runs:[] };
+  resultOv.hidden = true;
+  startOv.hidden = false;
+  elCards.hidden = true;
+  if (s) s.over = true;
+  elRunLabel.textContent = 'RUN 1 / ' + RUNS_PER_SESSION;
+});
+
+/* 조준은 한 번에 한 손가락만 소유한다. 추적하지 않으면 카드를 누르는 두 번째
+   손가락의 move/up 이벤트가 조준점을 뺏거나 집중 사격을 꺼 버린다. */
+let activePid = null;
+
+function focusDown(e){
+  if (!s || s.over) return;
+  if (e.target.closest('.card') || e.target.closest('.overlay')) return;
+  if (activePid !== null) return;
+  if (s.focus.g < 12) return;
+  activePid = e.pointerId;
+  const p = toLogical(e);
+  s.focus.x = p.x; s.focus.y = p.y;
+  s.focus.on = true;
+  s.run.focusUses++;
+  try { stage.setPointerCapture(e.pointerId); } catch(err){}
+}
+function focusMove(e){
+  if (!s || !s.focus.on || e.pointerId !== activePid) return;
+  const p = toLogical(e);
+  s.focus.x = p.x; s.focus.y = p.y;
+}
+function focusUp(e){
+  if (e && activePid !== null && e.pointerId !== activePid) return;
+  activePid = null;
+  if (s) s.focus.on = false;
+}
+stage.addEventListener('pointerdown', focusDown);
+/* move/up 은 window 에서도 받는다. setPointerCapture 가 실패하는 브라우저에서
+   손가락이 스테이지 밖에서 떨어지면 집중 사격이 켜진 채로 남는다. */
+window.addEventListener('pointermove', focusMove);
+window.addEventListener('pointerup', focusUp);
+window.addEventListener('pointercancel', focusUp);
+window.addEventListener('blur', function(){ focusUp(); });
+document.addEventListener('visibilitychange', function(){ if (document.hidden) focusUp(); });
+stage.addEventListener('contextmenu', function(e){ e.preventDefault(); });
+
+/* 튜닝 패널 */
+(function(){
+  let h = '';
+  TUNE.forEach(function(t){
+    h += '<label>'+t.label+' <b id="v_'+t.id+'">'+t.val.toFixed(2)+'</b>'+
+         '<input type="range" id="r_'+t.id+'" min="'+t.min+'" max="'+t.max+'" step="'+t.step+'" value="'+t.val+'"></label>';
+  });
+  devPanel.innerHTML = h;
+  TUNE.forEach(function(t){
+    $('r_'+t.id).addEventListener('input', function(){
+      tune[t.id] = parseFloat(this.value);
+      $('v_'+t.id).textContent = tune[t.id].toFixed(2);
+      if (t.id === 'focus' && s) s.buff.focusMult = tune.focus;
+    });
+  });
+})();
+$('devBtn').addEventListener('click', function(){
+  devPanel.hidden = !devPanel.hidden;
+  this.setAttribute('aria-pressed', String(!devPanel.hidden));
+});
+
+/* 부트 */
+s = newRun();
+computeMods();
+fit();
+draw();
+syncHud();
+s.over = true;
+requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
